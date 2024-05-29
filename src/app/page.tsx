@@ -20,7 +20,10 @@ import { useQuery } from "@tanstack/react-query";
 import { QueryResult } from "@upstash/vector";
 import axios from "axios";
 import { ChevronDownIcon, Filter } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
+import debounce from "lodash.debounce";
+import _ from "lodash";
+import EmptyState from "@/components/Product/EmptyState";
 
 const SORT_OPTIONS = [
   { name: "None", value: "none" },
@@ -78,7 +81,7 @@ export default function Home() {
     size: ["L", "M", "S"],
   });
 
-  const { data: products } = useQuery({
+  const { data: products, refetch } = useQuery({
     queryKey: ["products"],
     queryFn: async () => {
       const { data } = await axios.post<QueryResult<ProductType>>(
@@ -86,6 +89,9 @@ export default function Home() {
         {
           filter: {
             sort: filter.sort,
+            color: filter.color,
+            price: filter.price.range,
+            size: filter.size,
           },
         }
       );
@@ -93,7 +99,10 @@ export default function Home() {
     },
   });
 
- // console.log(filter)
+  const onSubmit = () => refetch();
+
+  const debouncedSubmit = debounce(onSubmit, 400);
+  const _debouncedSubmit = useCallback(debouncedSubmit, []);
 
   const applyArrayFilter = ({
     category,
@@ -103,6 +112,7 @@ export default function Home() {
     value: string;
   }) => {
     const isFilterApplied = filter[category].includes(value as never);
+
     if (isFilterApplied) {
       setFilter((prev) => ({
         ...prev,
@@ -114,6 +124,8 @@ export default function Home() {
         [category]: [...prev[category], value],
       }));
     }
+
+    _debouncedSubmit();
   };
 
   const minPrice = Math.min(filter.price.range[0], filter.price.range[0]);
@@ -143,6 +155,7 @@ export default function Home() {
                         ...prev,
                         sort: option.value,
                       }));
+                      _debouncedSubmit();
                     }}
                   >
                     {option.name}
@@ -257,6 +270,7 @@ export default function Home() {
                                 range: [...option.value],
                               },
                             }));
+                            _debouncedSubmit();
                           }}
                           checked={
                             !filter.price.isCustom &&
@@ -286,6 +300,7 @@ export default function Home() {
                                 range: [0, 100],
                               },
                             }));
+                            _debouncedSubmit();
                           }}
                           checked={filter.price.isCustom}
                           className="size-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
@@ -302,11 +317,11 @@ export default function Home() {
                         <div>
                           {filter.price.isCustom
                             ? minPrice.toFixed(0)
-                            : filter.price.range[0].toFixed(0)}{' '}
-                          € -{' '}
+                            : filter.price.range[0].toFixed(0)}{" "}
+                          € -{" "}
                           {filter.price.isCustom
                             ? maxPrice.toFixed(0)
-                            : filter.price.range[1].toFixed(0)}{' '}
+                            : filter.price.range[1].toFixed(0)}{" "}
                           €
                         </div>
                       </div>
@@ -322,14 +337,15 @@ export default function Home() {
                               range: [newMin, newMax],
                             },
                           }));
+                          _debouncedSubmit();
                         }}
                         value={
                           filter.price.isCustom
                             ? filter.price.range
                             : DEFAULT_CUSTOM_PRICE
                         }
-                        min={DEFAULT_CUSTOM_PRICE[0]}
                         defaultValue={DEFAULT_CUSTOM_PRICE}
+                        min={DEFAULT_CUSTOM_PRICE[0]}
                         max={DEFAULT_CUSTOM_PRICE[1]}
                         step={5}
                       />
@@ -341,13 +357,17 @@ export default function Home() {
           </div>
           {/* Product Grid */}
           <ul className="lg:col-span-3 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-8">
-            {products
-              ? products?.map((product) => (
-                  <Product product={product.metadata!} />
-                ))
-              : new Array(12)
-                  .fill(null)
-                  .map((_, i) => <ProductSkeleton key={i} />)}
+            {products && products.length === 0 ? (
+              <EmptyState />
+            ) : products ? (
+              products?.map((product) => (
+                <Product key={product.metadata.id} product={product.metadata!} />
+              ))
+            ) : (
+              new Array(12)
+                .fill(null)
+                .map((_, i) => <ProductSkeleton key={i} />)
+            )}
           </ul>
         </div>
       </section>
